@@ -1,0 +1,38 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tagged source
+        env:
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          git init .
+          git remote add origin "$SOURCE_URL"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
+
+      - name: Package versioned source
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          python3 tools/package_release.py "$VERSION" "$RUNNER_TEMP/DMsManager-$VERSION.zip"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          gh release create "$RELEASE_TAG" "$RUNNER_TEMP/DMsManager-$VERSION.zip" --verify-tag --title "DMs Manager $VERSION" --notes-file RELEASE_NOTES.md

@@ -2,7 +2,7 @@
 
 A custom Vencord plugin for cleaning up your own messages and saving DM conversations.
 
-Version **0.1.0**.
+Version **1.0.0**.
 
 ## What it does
 
@@ -11,7 +11,15 @@ Version **0.1.0**.
 - Export conversations as themed HTML or JSON, including available guild tags and their badge images.
 - Pause or cancel a running job. Switching accounts stops further requests.
 
-Open **Settings → Vencord → Plugins → DMsManager → settings**, then choose **Open DMsManager**. You can also use the Vencord toolbox or right-click an existing DM.
+Click the **DMs Manager** speech-bubble icon in Discord's top bar to open the manager. It appears while viewing a DM or group DM and opens with that conversation selected. You can also open it from the plugin settings or the Vencord toolbox.
+
+## Run in the background
+
+Use **Minimize** at the bottom of the manager to hide it while a scan, export, or deletion continues. The top-bar button stays available while a job is running or the manager is minimized, including outside DMs. Reopen it to see the same selections and live progress, or to pause or cancel the job.
+
+You'll receive a Vencord notification when a job finishes or stops. Click it to reopen the manager. A completed scan still requires the typed confirmation before anything is deleted. Exports trigger their download when ready, including while minimized.
+
+Clicking outside the manager, using the close icon, or pressing Escape also minimizes it. Only **Cancel** or **Cancel and close** stops a running job. Switching accounts or disabling the plugin also stops it. Discord must stay running; jobs don't survive a restart. One request already in flight may still finish after cancellation.
 
 ## Delete your messages
 
@@ -20,15 +28,21 @@ Open **Settings → Vencord → Plugins → DMsManager → settings**, then choo
 3. Check the results and type the exact `DELETE N` confirmation.
 4. Choose **Delete N of my messages**.
 
-Deletion is permanent. Only your ordinary messages and replies are eligible; other participants' messages and system events are excluded. The plugin checks ownership again immediately before each delete. A request already in flight may finish after you pause, cancel, close the manager, or switch accounts.
+Deletion is permanent. Only your ordinary messages and replies are eligible; other participants' messages and system events are excluded. The plugin checks ownership again immediately before each delete. A request already in flight may finish after you pause, cancel, switch accounts, or disable the plugin.
 
 Requests run sequentially. The default delay between deletes is 1.5 seconds, and rate-limit responses are respected. Each scan is limited to 50,000 messages across the selected conversations. For larger histories, use smaller date ranges. Dates use UTC and include the entire selected end date.
 
 ## Exports
 
-HTML exports capture theme colors, the active font, message spacing, and avatar rounding. They include basic message formatting, reply excerpts, attachment links, image/video previews, and available guild tags. JSON keeps the normalized message data and captured theme values.
+The default **Themed HTML + media (ZIP)** option combines your themed conversation pages with downloaded media in one archive. It saves two main folders: `avatars/` and `conversations/`. Each conversation has its own `index.html` and `media/` folder. Extract the entire ZIP, then open the root `index.html` to choose a conversation. Keep the folders together so local images and attachments continue to work. Saved media loads from these files without a hosting service.
 
-These are static exports, so custom CSS effects and animations aren't reproduced. Fonts must be installed on the computer viewing the file. Media stays linked to Discord and may require an internet connection; attachment URLs can expire. This version does not download an offline media archive.
+ZIP exports download available Discord-hosted avatars, attachments, custom emoji, supported stickers, and guild-tag images. On desktop, browser-blocked CDN downloads are retried through Vencord's native helper, without cookies or account tokens. This helper accepts only the supported Discord CDN hosts and enforces the same file-size limit. Fully restart Discord after installing this update so the helper loads.
+
+There is a 25 MB per-file limit, a 100 MB total media limit, and a 2,000-download limit. Files that fail or exceed a limit keep their online links. Open `media-report.html` for their filenames, conversation, error, and original link; `media-report.json` contains the structured report. Conversation pages also show a notice when media is missing. A 404 file cannot be recovered by bypassing a browser restriction. External websites aren't downloaded. Use smaller date ranges for larger archives.
+
+**JSON archive** is the other export option and keeps normalized message data and captured theme values.
+
+HTML pages capture theme colors, font names, message spacing, and avatar rounding, with basic formatting, clickable HTTPS links, audio/video players, attachment sizes, and available guild tags. Replies link to their referenced message when that message is included in the export. Custom CSS effects aren't reproduced and fonts aren't bundled; the viewing computer needs those fonts installed.
 
 Guild tags reflect information available when exporting, not necessarily the tag someone had when they sent a message. Hidden or cleared tags aren't filled back in from cached data when the message explicitly reports that state.
 
