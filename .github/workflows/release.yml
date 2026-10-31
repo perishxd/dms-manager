@@ -4,6 +4,13 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish
+        required: true
+        default: v1.0.0
+        type: string
 
 permissions:
   contents: write
@@ -13,17 +20,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the tagged source
-        env:
-          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}.git
-        run: |
-          git init .
-          git remote add origin "$SOURCE_URL"
-          git fetch --depth=1 origin "$GITHUB_SHA"
-          git checkout --detach FETCH_HEAD
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          persist-credentials: false
 
       - name: Package versioned source
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
           VERSION="${RELEASE_TAG#v}"
           python3 tools/package_release.py "$VERSION" "$RUNNER_TEMP/DMsManager-$VERSION.zip"
@@ -32,7 +36,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
           VERSION="${RELEASE_TAG#v}"
           gh release create "$RELEASE_TAG" "$RUNNER_TEMP/DMsManager-$VERSION.zip" --verify-tag --title "DMs Manager $VERSION" --notes-file RELEASE_NOTES.md
