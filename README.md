@@ -2,7 +2,7 @@
 
 A custom Vencord plugin for cleaning up your own messages and saving DM conversations.
 
-Version **0.1.0**.
+Version **1.0.0**.
 
 ## What it does
 
