@@ -49,28 +49,43 @@ function format(text: string, users: Map<string, string>) {
     return String(text).split(/(```[\s\S]*?```|`[^`\n]+`)/g).map(part => {
         if (part.startsWith("```")) return `<pre><code>${escapeHtml(part.slice(3, -3).replace(/^[a-z]+\n/i, ""))}</code></pre>`;
         if (part.startsWith("`")) return `<code>${escapeHtml(part.slice(1, -1))}</code>`;
-        return escapeHtml(part)
+        const inline = (value: string) => escapeHtml(value)
             .replace(/&lt;@!?(\d+)&gt;/g, (_, id) => `<span class="mention">@${escapeHtml(users.get(id) ?? id)}</span>`)
             .replace(/&lt;(a?):(\w+):(\d{17,20})&gt;/g, (_, animated, name, id) => `<img class="emoji" src="https://cdn.discordapp.com/emojis/${id}.${animated ? "gif" : "png"}?size=48" alt=":${name}:" loading="lazy">`)
             .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>").replace(/__([^_\n]+)__/g, "<u>$1</u>")
             .replace(/~~([^~\n]+)~~/g, "<del>$1</del>").replace(/\|\|([^|]+)\|\|/g, '<span class="spoiler" tabindex="0">$1</span>')
             .replace(/\n/g, "<br>");
+        return part.split(/(\[[^\]\n]{1,200}\]\(https:\/\/[^\s<>]+\)|https:\/\/[^\s<>`]+)/g).map(piece => {
+            const markdown = piece.match(/^\[([^\]]+)\]\((https:\/\/.+)\)$/);
+            if (markdown) {
+                const url = safeUrl(markdown[2]);
+                return url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(markdown[1])}</a>` : inline(piece);
+            }
+            if (!piece.startsWith("https://")) return inline(piece);
+            let url = piece, tail = "";
+            while (/[.,!?;:]$/.test(url)) { tail = url.slice(-1) + tail; url = url.slice(0, -1); }
+            for (const [open, close] of [["(", ")"], ["[", "]"], ["{", "}"]])
+                while (url.endsWith(close) && url.split(close).length > url.split(open).length) { tail = close + tail; url = url.slice(0, -1); }
+            const safe = safeUrl(url);
+            return safe ? `<a href="${escapeHtml(safe)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>${inline(tail)}` : inline(piece);
+        }).join("");
     }).join("");
 }
 function attachment(item: NonNullable<Message["attachments"]>[number]) {
     const url = safeUrl(item.url); if (!url) return `<div class="attachment">${escapeHtml(item.filename)} — unavailable link</div>`;
-    const link = `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.filename)}</a>`;
-    return `<div class="attachment">${item.content_type?.startsWith("image/") ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"><img class="media" src="${escapeHtml(url)}" alt="${escapeHtml(item.filename)}" loading="lazy"></a>` : item.content_type?.startsWith("video/") ? `<video class="media" controls preload="none" src="${escapeHtml(url)}"></video>` : ""}${link}</div>`;
+    const link = `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" download>${escapeHtml(item.filename)}</a>`;
+    return `<div class="attachment">${item.content_type?.startsWith("image/") ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"><img class="media" src="${escapeHtml(url)}" alt="${escapeHtml(item.filename)}" loading="lazy"></a>` : item.content_type?.startsWith("video/") ? `<video class="media" controls preload="none" src="${escapeHtml(url)}"></video>` : item.content_type?.startsWith("audio/") ? `<audio class="media" controls preload="none" src="${escapeHtml(url)}"></audio>` : ""}${link}${typeof item.size === "number" && item.size >= 0 ? `<small class="subtle">${item.size < 1024 ? `${item.size} B` : item.size < 1048576 ? `${(item.size / 1024).toFixed(1)} KB` : `${(item.size / 1048576).toFixed(1)} MB`}</small>` : ""}</div>`;
 }
 export function renderExport(plan: ScanResult, theme: Theme, generated = new Date().toISOString()) {
     const users = new Map(plan.messages.map(m => [m.author.id, m.author.global_name || m.author.username || m.author.id]));
+    const messageIds = new Set(plan.messages.map(message => message.id));
     const sections = plan.channels.map(channel => {
         const messages = plan.messages.filter(m => m.channel_id === channel.id).sort((a, b) => BigInt(a.id) < BigInt(b.id) ? -1 : 1);
         let lastDay = "";
         return `<section id="dm-${channel.id}"><h2>${escapeHtml(channel.name)}</h2><p class="subtle">${messages.length.toLocaleString()} messages · ${channel.id}</p>${messages.map(message => {
             const day = message.timestamp.slice(0, 10), separator = day !== lastDay ? `<div class="date">${escapeHtml(day)}</div>` : ""; lastDay = day;
             const reply = message.referenced_message;
-            const replyHtml = reply ? `<div class="reply">↪ ${escapeHtml(reply.author?.global_name || reply.author?.username || "Reply")}: ${escapeHtml(reply.content.slice(0, 240))}</div>` : "";
+            const replyHtml = reply ? `<div class="reply">↪ ${escapeHtml(reply.author?.global_name || reply.author?.username || "Reply")}: ${escapeHtml(reply.content.slice(0, 240))}${messageIds.has(reply.id) ? ` · <a href="#m-${reply.id}" title="Jump to referenced message">Jump to message</a>` : ""}</div>` : "";
             const embeds = (message.embeds ?? []).map(e => `<aside>${e.title ? `<strong>${escapeHtml(e.title)}</strong>` : ""}<div>${format(e.description ?? "", users)}</div>${safeUrl(e.url) ? `<a href="${escapeHtml(safeUrl(e.url))}" target="_blank" rel="noopener noreferrer">Open link</a>` : ""}</aside>`).join("");
             const stickers = (message.sticker_items ?? []).map(s => `<div class="attachment">Sticker: ${escapeHtml(s.name)}${/^\d{17,20}$/.test(s.id) && [1,2,4].includes(s.format_type) ? `<img class="sticker" src="https://cdn.discordapp.com/stickers/${s.id}.${s.format_type === 4 ? "gif" : "png"}" alt="${escapeHtml(s.name)}" loading="lazy">` : ""}</div>`).join("");
             return `${separator}<article id="m-${message.id}"><img class="avatar" src="${avatar(message.author)}" alt="" loading="lazy"><div class="body">${replyHtml}<header><strong>${escapeHtml(users.get(message.author.id))}</strong>${guildTag(message.author)}<time datetime="${escapeHtml(message.timestamp)}">${escapeHtml(message.timestamp.replace("T", " ").slice(0, 19))} UTC</time>${message.edited_timestamp ? '<small>(edited)</small>' : ""}</header>${message.type !== 0 && message.type !== 19 ? `<small class="subtle">System / special message · type ${message.type}</small>` : ""}<div class="content">${format(message.content, users)}</div>${(message.attachments ?? []).map(attachment).join("")}${embeds}${stickers}</div></article>`;

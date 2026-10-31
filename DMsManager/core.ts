@@ -23,6 +23,12 @@ export interface Transport {
     remove(channel: string, id: string): Promise<void>;
 }
 export const validId = (id: unknown): id is string => typeof id === "string" && /^\d{17,20}$/.test(id);
+export function describeError(error: any): string {
+    const status = error?.status ?? error?.response?.status;
+    const body = error?.body ?? error?.response?.body;
+    const message = typeof body?.message === "string" ? body.message : typeof error?.message === "string" ? error.message : typeof error === "string" ? error : "Discord request failed.";
+    return `${message}${typeof status === "number" ? ` (HTTP ${status}${typeof body?.code === "number" ? `, code ${body.code}` : ""})` : ""}`;
+}
 export const deletable = (message: Message, owner: string) => message.author.id === owner && (message.type === 0 || message.type === 19);
 export function snowflakeAt(ms: number) { return ((BigInt(Math.max(1420070400000, Math.floor(ms))) - 1420070400000n) << 22n).toString(); }
 export function normalizeMessage(raw: any, channel: string): Message {
@@ -120,21 +126,23 @@ export class Job {
         if (plan.owner !== this.owner) throw Error("The preview belongs to another account. Scan again.");
         const channels = new Set(plan.channels.map(c => c.id));
         if (plan.messages.some(m => !deletable(m, this.owner) || !validId(m.id) || !channels.has(m.channel_id))) throw Error("The purge preview contains an invalid candidate. Scan again.");
-        this.update({ phase: "Deleting your messages…", total: plan.messages.length, deleted: 0, missing: 0 });
+        this.update({ phase: "Deleting your messages…", scanned: plan.scanned, matched: plan.messages.length, total: plan.messages.length, deleted: 0, missing: 0 });
         for (const candidate of plan.messages) {
             await this.checkpoint();
             if (!this.api.privateChannel(candidate.channel_id)) throw Error("The conversation is no longer an accessible DM.");
             this.update({ channel: plan.channels.find(c => c.id === candidate.channel_id)?.name ?? candidate.channel_id });
+            let stage = "verify";
             try {
                 // Verify ownership again immediately before each delete.
                 const raw = await this.request(() => this.api.message(candidate.channel_id, candidate.id));
                 const current = normalizeMessage(raw, candidate.channel_id);
                 if (current.id !== candidate.id || !deletable(current, this.owner)) throw Error("Message ownership no longer matches the preview. Purge stopped.");
+                stage = "delete";
                 await this.request(() => this.api.remove(candidate.channel_id, candidate.id));
                 this.update({ deleted: this.progress.deleted + 1, phase: "Deleting your messages…" });
             } catch (error: any) {
                 if ((error?.status ?? error?.response?.status) === 404) this.update({ missing: this.progress.missing + 1 });
-                else throw error;
+                else throw Error(`Could not ${stage} message: ${describeError(error)}`);
             }
             await this.sleep(Math.max(1000, this.delay));
         }

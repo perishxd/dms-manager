@@ -43,6 +43,7 @@
 .dmm-channels { height: clamp(280px, 44vh, 440px); overflow-y: auto; overflow-x: hidden; border: 1px solid var(--dmm-border); background: var(--dmm-input); border-radius: 10px; padding: 5px; scrollbar-width: thin; scrollbar-color: var(--dmm-border) transparent; }
 .dmm .dmm-channel { display: flex; align-items: center; gap: 11px; padding: 10px; margin: 2px 0; border: 1px solid transparent; border-radius: 7px; min-height: 58px; cursor: pointer; transition: background 120ms, border-color 120ms; }
 .dmm-channel:hover { background: var(--background-modifier-hover, #ffffff08); }
+.dmm-channels { position: relative; }
 .dmm-channel.selected { background: color-mix(in srgb, var(--dmm-brand) 14%, transparent); border-color: color-mix(in srgb, var(--dmm-brand) 45%, transparent); }
 .dmm-channel small { display: block; color: var(--dmm-muted); font: 10px/1.5 var(--font-code, monospace); margin-top: 3px; }
 .dmm-channel span { min-width: 0; overflow-wrap: anywhere; font-size: 13px; font-weight: 550; }

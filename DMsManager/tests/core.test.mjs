@@ -9,7 +9,7 @@ const require=createRequire(import.meta.url),{build}=require('esbuild');
 const temp=await mkdtemp(join(tmpdir(),'dms-manager-'));
 await build({entryPoints:[fileURLToPath(new URL('../core.ts',import.meta.url))],outfile:join(temp,'core.cjs'),bundle:true,platform:'node',format:'cjs'});
 await build({entryPoints:[fileURLToPath(new URL('../export.ts',import.meta.url))],outfile:join(temp,'export.cjs'),bundle:true,platform:'node',format:'cjs'});
-const {Job,snowflakeAt,normalizeMessage}=require(join(temp,'core.cjs'));
+const {Job,snowflakeAt,normalizeMessage,describeError}=require(join(temp,'core.cjs'));
 const {renderExport,defaultTheme,guildTag,safeUrl}=require(join(temp,'export.cjs'));
 after(()=>rm(temp,{recursive:true,force:true}));
 const owner='1113854342517243904',other='222222222222222222',channel='333333333333333333';
@@ -22,6 +22,11 @@ function fixture(rows=[message()]){
  return{api,job,deleted,delays,switch:()=>current=other};
 }
 const scope=[{id:channel,name:'My DM'}];
+test('Discord response objects display the actual HTTP status and message',()=>{
+ assert.equal(describeError({status:405,body:{message:'Method not allowed',code:0}}),'Method not allowed (HTTP 405, code 0)');
+ assert.equal(describeError({response:{status:403,body:{message:'Missing Access',code:50001}}}),'Missing Access (HTTP 403, code 50001)');
+ assert.equal(describeError(Error('Account changed.')),'Account changed.');
+});
 test('preview includes only own ordinary messages/replies and performs no deletes',async()=>{
  const f=fixture([message(5),message(4,other),message(3,owner,19),message(2,owner,7)]);
  const plan=await f.job.scan(scope,range,'purge');assert.equal(plan.scanned,4);assert.equal(plan.messages.length,2);assert.equal(plan.ownCount,2);assert.deepEqual(f.deleted,[]);
@@ -82,4 +87,10 @@ test('hostile content, attachment links and theme values cannot create executabl
  const f=fixture([m]),plan=await f.job.scan(scope,range,'export');const html=renderExport(plan,{...defaultTheme,font:'</style><script>evil()</script>'});
  assert.doesNotMatch(html,/<script|<img src=x|src="javascript:/);assert.match(html,/&lt;script&gt;/);assert.match(html,/<strong>hello<\/strong>/);assert.match(html,/script-src 'none'/);
  assert.equal(safeUrl('javascript:alert(1)'),'');assert.equal(safeUrl('https://user:pass@example.com/a'),'');
+});
+test('HTML makes links clickable, keeps code literal, and supports audio and reply navigation',()=>{
+ const first=message(1),reply={...message(2),content:'Visit https://example.com/a?x=1&y=2. [A link](https://example.com/b) `https://code.example/`',referenced_message:{id:first.id,content:'hello',author:first.author},attachments:[{id:'555555555555555555',filename:'voice.ogg',url:'https://cdn.discordapp.com/attachments/333333333333333333/555555555555555555/voice.ogg',content_type:'audio/ogg',size:2048}]};
+ const html=renderExport({owner,channels:scope,range,messages:[first,reply],scanned:2,ownCount:2},defaultTheme);
+ assert.match(html,/href="https:\/\/example.com\/a\?x=1&amp;y=2"/);assert.match(html,/href="https:\/\/example.com\/b"[^>]*>A link<\/a>/);
+ assert.doesNotMatch(html,/href="https:\/\/code.example/);assert.match(html,/<audio class="media" controls/);assert.match(html,/2.0 KB/);assert.match(html,new RegExp('href="#m-'+first.id+'"'));
 });
